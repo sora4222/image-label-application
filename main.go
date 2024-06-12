@@ -166,9 +166,15 @@ func draw(window *app.Window, args *ProcArgs) error {
 					switch ev.Name {
 					case key.NameBack:
 						// TODO: Implement backspace
+						if ev.State != key.Press {
+							break
+						}
 						fmt.Println("Pressed backspace")
 					default:
 						// Copy the file to the other locations
+						if ev.State != key.Press {
+							break
+						}
 						fmt.Println("Pressed a labelling key")
 						k := []rune(ev.Name)[0]
 						label := args.labels[k]
