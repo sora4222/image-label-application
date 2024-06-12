@@ -115,11 +115,27 @@ func main() {
 	app.Main()
 }
 
+// createDirectories creates directories for each label in the image directory
+// If the directory already exists, it will delete all files in the directory.
 func createDirectories(args *ProcArgs) {
 	for _, val := range args.labels {
 		err := os.Mkdir(args.imgDir+"/"+val, 0750)
-		if err != nil && !os.IsExist(err) {
-			log.Fatal(err)
+		if err != nil {
+			if os.IsExist(err) {
+				// Delete all files in the directory
+				files, err := os.ReadDir(args.imgDir + "/" + val)
+				if err != nil {
+					log.Fatal(err)
+				}
+				for _, file := range files {
+					err := os.Remove(args.imgDir + "/" + val + "/" + file.Name())
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+			} else {
+				log.Fatal(err)
+			}
 		}
 	}
 }
@@ -163,8 +179,8 @@ func draw(window *app.Window, args *ProcArgs) error {
 						args.labelIndex[k]++
 						for {
 							currentImgIndex++
-							if imagesToView[currentImgIndex].IsDir() {
-								continue
+							if !imagesToView[currentImgIndex].IsDir() {
+								break
 							}
 						}
 					}
