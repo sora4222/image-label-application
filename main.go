@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"gioui.org/app"
 	"gioui.org/io/event"
@@ -119,7 +118,7 @@ func main() {
 func createDirectories(args *ProcArgs) {
 	for _, val := range args.labels {
 		err := os.Mkdir(args.imgDir+"/"+val, 0750)
-		if err != nil {
+		if err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
 	}
@@ -143,7 +142,7 @@ func draw(window *app.Window, args *ProcArgs) error {
 			for {
 				ev, ok := gtx.Event(args.keyFilter...)
 				if !ok {
-					return errors.New("KeyFilter error")
+					break
 				}
 
 				switch ev := ev.(type) {
@@ -170,29 +169,30 @@ func draw(window *app.Window, args *ProcArgs) error {
 						}
 					}
 				}
-
-				// Process the image
-				imgFile, err := os.Open(args.imgDir + "/" + imagesToView[currentImgIndex].Name())
-				if err != nil {
-					return err
-				}
-				window.Option(app.Title(imgFile.Name()))
-
-				img, _, err := image.Decode(imgFile)
-				if err != nil {
-					return err
-				}
-
-				err = imgFile.Close()
-				if err != nil {
-					return err
-				}
-				imgOp := paint.NewImageOp(img)
-				widget.Image{Src: imgOp, Fit: widget.ScaleDown}.Layout(gtx)
-
-				area.Pop()
-				e.Frame(gtx.Ops)
 			}
+
+			// Process the image
+			imgFile, err := os.Open(args.imgDir + "/" + imagesToView[currentImgIndex].Name())
+			if err != nil {
+				return err
+			}
+			window.Option(app.Title(imgFile.Name()))
+
+			img, _, err := image.Decode(imgFile)
+			if err != nil {
+				return err
+			}
+
+			err = imgFile.Close()
+			if err != nil {
+				return err
+			}
+			imgOp := paint.NewImageOp(img)
+			widget.Image{Src: imgOp, Fit: widget.ScaleDown}.Layout(gtx)
+
+			area.Pop()
+			e.Frame(gtx.Ops)
+
 		}
 	}
 }
