@@ -14,14 +14,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 )
 
 type ProcArgs struct {
-	labels    map[rune]string
-	imgDir    string
-	keyFilter []event.Filter
+	labels     map[rune]string
+	imgDir     string
+	keyFilter  []event.Filter
+	labelIndex map[rune]int
 }
 
 func processArgs() (*ProcArgs, error) {
@@ -31,6 +33,7 @@ func processArgs() (*ProcArgs, error) {
 		return nil, err
 	}
 	labelsMap := make(map[rune]string)
+	labelIndex := make(map[rune]int)
 	filter := make([]event.Filter, 0, len(args[1:]))
 	for _, val := range args[1:] {
 		labelCharSplit := strings.Split(val, "=")
@@ -44,10 +47,11 @@ func processArgs() (*ProcArgs, error) {
 			return nil, fmt.Errorf("keyboard character has been assigned twice %v", char)
 		}
 		labelsMap[char] = labelCharSplit[0]
+		labelIndex[char] = 0
 		filter = append(filter, key.Filter{Name: key.Name(char)})
 	}
 	filter = append(filter, key.Filter{Name: key.NameBack})
-	return &ProcArgs{imgDir: args[0], labels: labelsMap, keyFilter: filter}, nil
+	return &ProcArgs{imgDir: args[0], labels: labelsMap, keyFilter: filter, labelIndex: labelIndex}, nil
 }
 
 func copyFile(src, dst string) error {
@@ -131,11 +135,6 @@ func draw(window *app.Window, args *ProcArgs) error {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
-			if imagesToView[currentImgIndex].IsDir() {
-				currentImgIndex++
-				continue
-			}
-
 			// This graphics context is used for managing the rendering state.
 			gtx := app.NewContext(&ops, e)
 			// register a global key listener for the escape key wrapping our entire UI.
@@ -156,13 +155,19 @@ func draw(window *app.Window, args *ProcArgs) error {
 					default:
 						// Copy the file to the other locations
 						fmt.Println("Pressed a labelling key")
-						key := []rune(ev.Name)[0]
-						label := args.labels[key]
-						err := copyFile(args.imgDir+"/"+imagesToView[currentImgIndex].Name(), args.imgDir+"/"+label+"/"+imagesToView[currentImgIndex].Name())
+						k := []rune(ev.Name)[0]
+						label := args.labels[k]
+						err := copyFile(args.imgDir+"/"+imagesToView[currentImgIndex].Name(), args.imgDir+"/"+label+"/"+strconv.Itoa(args.labelIndex[k])+".jpg")
 						if err != nil {
 							return err
 						}
-						currentImgIndex++
+						args.labelIndex[k]++
+						for {
+							currentImgIndex++
+							if imagesToView[currentImgIndex].IsDir() {
+								continue
+							}
+						}
 					}
 				}
 
