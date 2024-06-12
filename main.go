@@ -11,6 +11,7 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/widget"
 	"image"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -26,7 +27,7 @@ type ProcArgs struct {
 func processArgs() (*ProcArgs, error) {
 	args := os.Args[1:]
 	pathInfo, err := os.Stat(args[0])
-	if err != nil || pathInfo.IsDir() != true {
+	if err != nil || !pathInfo.IsDir() {
 		return nil, err
 	}
 	labelsMap := make(map[rune]string)
@@ -34,19 +35,63 @@ func processArgs() (*ProcArgs, error) {
 	for _, val := range args[1:] {
 		labelCharSplit := strings.Split(val, "=")
 		if len(labelCharSplit) != 2 {
-			return nil, errors.New(fmt.Sprintf("label and key should be separated by a single '=', %v", val))
+			return nil, fmt.Errorf("label and key should be separated by a single '=', %v", val)
 		}
 		// Need to add validation for label for directory
 		// Check character hasn't been added before
-		char := []rune(labelCharSplit[1])[0]
+		char := unicode.ToUpper([]rune(labelCharSplit[1])[0])
 		if _, ok := labelsMap[char]; ok {
-			return nil, errors.New(fmt.Sprintf("keyboard character has been assigned twice %v", char))
+			return nil, fmt.Errorf("keyboard character has been assigned twice %v", char)
 		}
 		labelsMap[char] = labelCharSplit[0]
-		filter = append(filter, key.Filter{Name: key.Name(unicode.ToUpper(char))})
+		filter = append(filter, key.Filter{Name: key.Name(char)})
 	}
 	filter = append(filter, key.Filter{Name: key.NameBack})
 	return &ProcArgs{imgDir: args[0], labels: labelsMap, keyFilter: filter}, nil
+}
+
+func copyFile(src, dst string) error {
+	// Open the source file for reading
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func(sourceFile *os.File) {
+		err := sourceFile.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(sourceFile)
+
+	// Create the destination file for writing
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func(destFile *os.File) {
+		err := destFile.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(destFile)
+
+	// Copy the contents of the source file to the destination file
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Copy file permissions from source to destination
+	info, err := sourceFile.Stat()
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(dst, info.Mode())
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func main() {
@@ -54,6 +99,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	createDirectories(procArgs)
 	go func() {
 		window := new(app.Window)
 
@@ -64,6 +110,15 @@ func main() {
 		os.Exit(0)
 	}()
 	app.Main()
+}
+
+func createDirectories(args *ProcArgs) {
+	for _, val := range args.labels {
+		err := os.Mkdir(args.imgDir+"/"+val, 0750)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 func draw(window *app.Window, args *ProcArgs) error {
@@ -101,6 +156,12 @@ func draw(window *app.Window, args *ProcArgs) error {
 					default:
 						// Copy the file to the other locations
 						fmt.Println("Pressed a labelling key")
+						key := []rune(ev.Name)[0]
+						label := args.labels[key]
+						err := copyFile(args.imgDir+"/"+imagesToView[currentImgIndex].Name(), args.imgDir+"/"+label+"/"+imagesToView[currentImgIndex].Name())
+						if err != nil {
+							return err
+						}
 						currentImgIndex++
 					}
 				}
@@ -113,6 +174,10 @@ func draw(window *app.Window, args *ProcArgs) error {
 				window.Option(app.Title(imgFile.Name()))
 
 				img, _, err := image.Decode(imgFile)
+				if err != nil {
+					return err
+				}
+
 				err = imgFile.Close()
 				if err != nil {
 					return err
